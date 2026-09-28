@@ -5,7 +5,6 @@ import fitz  # PyMuPDF
 from PIL import Image
 import streamlit as st
 
-# Configure the Streamlit page
 st.set_page_config(
     page_title="PDF & Image Converter",
     page_icon="🔄",
@@ -15,7 +14,6 @@ st.set_page_config(
 st.title("🔄 PDF & Image Converter")
 st.caption("Convert PDFs to ultra-high-resolution images or compile images into a single PDF.")
 
-# Sidebar / Mode Selector
 task = st.radio(
     "Choose Mode:",
     ["📄 PDF to High-Quality Images", "🖼️ Images to PDF"],
@@ -40,7 +38,6 @@ if task == "📄 PDF to High-Quality Images":
         )
 
     with col2:
-        # DPI setting controls the resolution and quality
         dpi = st.select_slider(
             "Image Quality (DPI)",
             options=[150, 200, 300, 400, 600],
@@ -54,7 +51,6 @@ if task == "📄 PDF to High-Quality Images":
 
         if st.button("🚀 Convert PDF to Images", type="primary"):
             with st.spinner("Processing pages at high resolution..."):
-                # Open PDF directly from uploaded bytes
                 pdf_bytes = uploaded_pdf.read()
                 doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                 total_pages = len(doc)
@@ -62,11 +58,9 @@ if task == "📄 PDF to High-Quality Images":
                 converted_images = []
                 zip_buffer = io.BytesIO()
 
-                # Zoom factor: 72 DPI is base resolution in PyMuPDF
                 zoom = dpi / 72.0
                 mat = fitz.Matrix(zoom, zoom)
 
-                # Prepare in-memory ZIP archive
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                     progress_bar = st.progress(0)
 
@@ -78,10 +72,7 @@ if task == "📄 PDF to High-Quality Images":
                         page_num = page_idx + 1
                         file_name = f"{base_name}_{page_num}.{img_format.lower()}"
 
-                        # Save to ZIP
                         zip_file.writestr(file_name, img_bytes)
-
-                        # Save for on-screen preview
                         converted_images.append((file_name, img_bytes))
                         progress_bar.progress((page_idx + 1) / total_pages)
 
@@ -89,16 +80,14 @@ if task == "📄 PDF to High-Quality Images":
 
             st.success(f"Successfully converted {total_pages} page(s) at {dpi} DPI!")
 
-            # Download all as ZIP
             st.download_button(
-                label=f"📦 Download All Images (.zip)",
+                label="📦 Download All Images (.zip)",
                 data=zip_buffer.getvalue(),
                 file_name=f"{base_name}_images.zip",
                 mime="application/zip",
                 type="primary"
             )
 
-            # Preview Section
             st.write("### Preview & Individual Downloads")
             grid_cols = st.columns(3)
             for idx, (img_name, img_data) in enumerate(converted_images):
@@ -113,7 +102,7 @@ if task == "📄 PDF to High-Quality Images":
                     )
 
 # =====================================================================
-# TASK 2: Images to PDF
+# TASK 2: Images to PDF (with Page Ordering & Reordering)
 # =====================================================================
 else:
     st.subheader("Convert Images to PDF")
@@ -125,34 +114,87 @@ else:
     )
 
     if uploaded_images:
-        pdf_output_name = st.text_input(
-            "Output PDF file name (without .pdf)",
-            value="merged_images"
-        ).strip()
-        if not pdf_output_name:
-            pdf_output_name = "merged_images"
+        # Cache image data in session state so re-ordering doesn't re-upload
+        current_names = [f.name for f in uploaded_images]
+        
+        # Check if files changed
+        if "loaded_files" not in st.session_state or [img["name"] for img in st.session_state.get("image_list", [])] != current_names:
+            st.session_state.image_list = [
+                {"name": f.name, "bytes": f.read()} for f in uploaded_images
+            ]
+            st.session_state.loaded_files = current_names
 
-        st.write(f"**Total images uploaded:** {len(uploaded_images)}")
+        st.write("---")
+        st.write("### 🔀 Arrange & Order Pages")
 
-        # Display thumbnail previews
-        with st.expander("Preview uploaded images", expanded=False):
-            prev_cols = st.columns(min(len(uploaded_images), 4))
-            for idx, img_file in enumerate(uploaded_images):
-                with prev_cols[idx % 4]:
-                    st.image(img_file, caption=img_file.name, use_container_width=True)
+        # Quick-sort controls
+        sort_col1, sort_col2 = st.columns([2, 2])
+        with sort_col1:
+            sort_order = st.selectbox(
+                "Quick Sort Pages:",
+                ["Keep Current Order", "File Name (A → Z)", "File Name (Z → A)"]
+            )
+            if st.button("Apply Quick Sort"):
+                if sort_order == "File Name (A → Z)":
+                    st.session_state.image_list.sort(key=lambda x: x["name"])
+                    st.rerun()
+                elif sort_order == "File Name (Z → A)":
+                    st.session_state.image_list.sort(key=lambda x: x["name"], reverse=True)
+                    st.rerun()
+
+        st.caption("Use the ⬆️ and ⬇️ buttons below to fine-tune the exact sequence:")
+
+        # Interactive manual reordering list
+        num_items = len(st.session_state.image_list)
+        for i in range(num_items):
+            item = st.session_state.image_list[i]
+            card_col1, card_col2, card_col3 = st.columns([1, 4, 2])
+
+            with card_col1:
+                st.image(item["bytes"], width=90)
+
+            with card_col2:
+                st.markdown(f"**Page {i + 1}:** `{item['name']}`")
+
+            with card_col3:
+                btn_up, btn_down = st.columns(2)
+                with btn_up:
+                    if st.button("⬆️ Up", key=f"up_{i}", disabled=(i == 0)):
+                        st.session_state.image_list[i], st.session_state.image_list[i - 1] = (
+                            st.session_state.image_list[i - 1],
+                            st.session_state.image_list[i],
+                        )
+                        st.rerun()
+                with btn_down:
+                    if st.button("⬇️ Down", key=f"down_{i}", disabled=(i == num_items - 1)):
+                        st.session_state.image_list[i], st.session_state.image_list[i + 1] = (
+                            st.session_state.image_list[i + 1],
+                            st.session_state.image_list[i],
+                        )
+                        st.rerun()
+
+        st.write("---")
+
+        # PDF Compilation settings
+        col_out1, col_out2 = st.columns([2, 1])
+        with col_out1:
+            pdf_output_name = st.text_input(
+                "Output PDF file name (without .pdf)",
+                value="merged_images"
+            ).strip()
+            if not pdf_output_name:
+                pdf_output_name = "merged_images"
 
         if st.button("🚀 Generate PDF", type="primary"):
-            with st.spinner("Compiling images into PDF..."):
+            with st.spinner("Compiling images into PDF in current order..."):
                 processed_images = []
 
-                for uploaded_img in uploaded_images:
-                    img = Image.open(uploaded_img)
-                    # Convert transparent RGBA / P images to RGB for PDF support
+                for item in st.session_state.image_list:
+                    img = Image.open(io.BytesIO(item["bytes"]))
                     if img.mode != "RGB":
                         img = img.convert("RGB")
                     processed_images.append(img)
 
-                # Save all images into a single PDF in memory
                 pdf_buffer = io.BytesIO()
                 first_img = processed_images[0]
                 rest_imgs = processed_images[1:]
