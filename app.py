@@ -41,7 +41,7 @@ if task == "📄 PDF to High-Quality Images":
         dpi = st.select_slider(
             "Image Quality (DPI)",
             options=[150, 200, 300, 400, 600],
-            value=300,
+            value=150,
             help="300 DPI is standard print quality. 600 DPI is ultra-high definition."
         )
         img_format = st.selectbox("Output Format", ["PNG", "JPEG"])
