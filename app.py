@@ -114,15 +114,14 @@ else:
     )
 
     if uploaded_images:
-        # Cache image data in session state so re-ordering doesn't re-upload
-        current_names = [f.name for f in uploaded_images]
-        
-        # Check if files changed
-        if "loaded_files" not in st.session_state or [img["name"] for img in st.session_state.get("image_list", [])] != current_names:
+        # Track uploads by sorted filenames so reordering within the list doesn't trigger a reset
+        upload_signature = sorted([f.name for f in uploaded_images])
+
+        if st.session_state.get("last_uploaded_signature") != upload_signature:
             st.session_state.image_list = [
                 {"name": f.name, "bytes": f.read()} for f in uploaded_images
             ]
-            st.session_state.loaded_files = current_names
+            st.session_state.last_uploaded_signature = upload_signature
 
         st.write("---")
         st.write("### 🔀 Arrange & Order Pages")
@@ -132,17 +131,16 @@ else:
         with sort_col1:
             sort_order = st.selectbox(
                 "Quick Sort Pages:",
-                ["Keep Current Order", "File Name (A → Z)", "File Name (Z → A)"]
+                ["File Name (A → Z)", "File Name (Z → A)"]
             )
             if st.button("Apply Quick Sort"):
                 if sort_order == "File Name (A → Z)":
                     st.session_state.image_list.sort(key=lambda x: x["name"])
-                    st.rerun()
                 elif sort_order == "File Name (Z → A)":
                     st.session_state.image_list.sort(key=lambda x: x["name"], reverse=True)
-                    st.rerun()
+                st.rerun()
 
-        st.caption("Use the ⬆️ and ⬇️ buttons below to fine-tune the exact sequence:")
+        st.caption("Use the ⬆️ and ⬇️ buttons below to fine-tune the sequence:")
 
         # Interactive manual reordering list
         num_items = len(st.session_state.image_list)
@@ -159,14 +157,14 @@ else:
             with card_col3:
                 btn_up, btn_down = st.columns(2)
                 with btn_up:
-                    if st.button("⬆️ Up", key=f"up_{i}", disabled=(i == 0)):
+                    if st.button("⬆️ Up", key=f"btn_up_{i}", disabled=(i == 0)):
                         st.session_state.image_list[i], st.session_state.image_list[i - 1] = (
                             st.session_state.image_list[i - 1],
                             st.session_state.image_list[i],
                         )
                         st.rerun()
                 with btn_down:
-                    if st.button("⬇️ Down", key=f"down_{i}", disabled=(i == num_items - 1)):
+                    if st.button("⬇️ Down", key=f"btn_down_{i}", disabled=(i == num_items - 1)):
                         st.session_state.image_list[i], st.session_state.image_list[i + 1] = (
                             st.session_state.image_list[i + 1],
                             st.session_state.image_list[i],
